@@ -300,6 +300,59 @@
       ) +
       service.mixin.spec.withType('NodePort'),
 
+    unsetReplicas(obj):: obj { spec: util.objectPop(obj.spec, 'replicas') },
+    objectPop(obj, key): {
+      [k]: obj[k]
+      for k in std.objectFieldsAll(obj)
+      if k != key
+    },
+
+    hpaFor(parent, max_replicas, min_replicas=1, avg_cpu=50, avg_mem=0)::
+      local as = $.autoscaling.v2;
+      local hpa = as.horizontalPodAutoscaler;
+      local hpa_spec = as.horizontalPodAutoscalerSpec;
+
+      hpa.new(parent.metadata.name) +
+      {
+        spec: hpa_spec.behavior.scaleUp.withPolicies(
+                {
+                  periodSeconds: 70,
+                  type: 'Pods',
+                  value: 4,
+                },
+              ) +
+              hpa_spec.behavior.scaleUp.withStabilizationWindowSeconds(0) +
+              hpa_spec.behavior.scaleDown.withPolicies(
+                {
+                  periodSeconds: 60,
+                  type: 'Pods',
+                  value: 2,
+                },
+              ) +
+              hpa_spec.behavior.scaleDown.withStabilizationWindowSeconds(30) +
+              hpa_spec.withMinReplicas(min_replicas) +
+              hpa_spec.withMaxReplicas(max_replicas) +
+              hpa_spec.scaleTargetRef.withKind(parent.kind) +
+              hpa_spec.scaleTargetRef.withApiVersion(parent.apiVersion) +
+              hpa_spec.scaleTargetRef.withName(parent.metadata.name) +
+              hpa_spec.withMetrics(
+                std.prune([
+                  (if avg_cpu != 0 then
+                     as.metricSpec.resource.target.withType('Utilization') +
+                     as.metricSpec.resource.target.withAverageUtilization(avg_cpu) +
+                     as.metricSpec.resource.withName('cpu') +
+                     as.metricSpec.withType('Resource')
+                   else null),
+                  (if avg_mem != 0 then
+                     as.metricSpec.resource.target.withType('Utilization') +
+                     as.metricSpec.resource.target.withAverageUtilization(avg_mem) +
+                     as.metricSpec.resource.withName('memory') +
+                     as.metricSpec.withType('Resource')
+                   else null),
+                ])
+              ),
+      },
+
     serviceFor(deployment, ignored_labels=[], nameFormat='%s', ignored_ports=[])::
       local container = $.core.v1.container;
       local service = $.core.v1.service;
