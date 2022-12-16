@@ -337,16 +337,16 @@
               hpa_spec.scaleTargetRef.withName(parent.metadata.name) +
               hpa_spec.withMetrics(
                 std.prune([
-                  (if avg_cpu != 0 then
-                     as.metricSpec.resource.target.withType('Utilization') +
-                     as.metricSpec.resource.target.withAverageUtilization(avg_cpu) +
-                     as.metricSpec.resource.withName('cpu') +
-                     as.metricSpec.withType('Resource')
-                   else null),
                   (if avg_mem != 0 then
                      as.metricSpec.resource.target.withType('Utilization') +
                      as.metricSpec.resource.target.withAverageUtilization(avg_mem) +
                      as.metricSpec.resource.withName('memory') +
+                     as.metricSpec.withType('Resource')
+                   else null),
+                  (if avg_cpu != 0 then
+                     as.metricSpec.resource.target.withType('Utilization') +
+                     as.metricSpec.resource.target.withAverageUtilization(avg_cpu) +
+                     as.metricSpec.resource.withName('cpu') +
                      as.metricSpec.withType('Resource')
                    else null),
                 ])
