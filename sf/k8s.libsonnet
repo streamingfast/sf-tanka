@@ -252,15 +252,15 @@
         {}
     ),
 
-    attachPVCTemplate(name, size, storageClass, resize=true, resizeLimit='3Ti')::
+    attachPVCTemplate(name, size, storageClass, resize=true, resizeLimit='3Ti', resizeStep='10%')::
       local pvc = $.core.v1.persistentVolumeClaim;
       local sts = $.apps.v1.statefulSet;
       sts.spec.withVolumeClaimTemplatesMixin(
         pvc.new('datadir') +
         (if resize then pvc.mixin.metadata.withAnnotations({
-           'resize.topolvm.io/increase': '10%',
+           'resize.topolvm.io/increase': resizeStep,
            'resize.topolvm.io/storage_limit': resizeLimit,
-           'resize.topolvm.io/threshold': '10%',
+           'resize.topolvm.io/threshold': resizeStep,
          }) else {}) +
         pvc.mixin.spec.resources.withRequests({ storage: size }) +
         pvc.mixin.spec.withAccessModes(['ReadWriteOnce']) +
@@ -268,7 +268,7 @@
         pvc.mixin.spec.withVolumeMode('Filesystem')
       ),
 
-    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null)::
+    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false)::
       local service = $.core.v1.service;
       self.serviceFor(targetResource, ignored_ports=[9102]) +
       (if exposedPort == null then service.mixin.metadata.withAnnotationsMixin({
@@ -277,6 +277,7 @@
          'cloud.google.com/neg': '{"exposed_ports":{"%d":{}}}' % exposedPort,
        })) +
       (if publishNotReadyAddresses then service.spec.withPublishNotReadyAddresses(true) else {}) +
+      (if withPublicIP then (service.spec.withAllocateLoadBalancerNodePorts(true) + service.spec.withType('LoadBalancer')) else {}) +
       (if headless then service.spec.withClusterIP('None') else {})
     ,
 
