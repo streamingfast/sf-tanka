@@ -97,6 +97,13 @@
                 timeoutSec: sec,
               },
             },
+            withConnectionDraining(sec):: {
+              spec+: {
+                connectionDraining: {
+                  drainingTimeoutSec: sec,
+                },
+              },
+            },
           },
         },
       },
