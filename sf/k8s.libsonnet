@@ -275,7 +275,7 @@
         pvc.mixin.spec.withVolumeMode('Filesystem')
       ),
 
-    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false)::
+    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false, backendConfig=null)::
       local service = $.core.v1.service;
       self.serviceFor(targetResource, ignored_ports=[9102]) +
       (if exposedPort == null then service.mixin.metadata.withAnnotationsMixin({
@@ -283,6 +283,11 @@
        }) else service.mixin.metadata.withAnnotationsMixin({
          'cloud.google.com/neg': '{"exposed_ports":{"%d":{}}}' % exposedPort,
        })) +
+       (
+         if backendConfig == null
+         then {}
+         else service.mixin.metadata.withAnnotationsMixin({ 'beta.cloud.google.com/backend-config': '{"default": "%s"}' % backendConfig })
+       ) +
       (if publishNotReadyAddresses then service.spec.withPublishNotReadyAddresses(true) else {}) +
       (if withPublicIP then (service.spec.withAllocateLoadBalancerNodePorts(true) + service.spec.withType('LoadBalancer')) else {}) +
       (if headless then service.spec.withClusterIP('None') else {})
