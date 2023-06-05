@@ -48,14 +48,14 @@
           super.mixin.readinessProbe.httpGet.withScheme(if ssl then 'HTTPS' else 'HTTP') +
           super.mixin.readinessProbe.withInitialDelaySeconds(5) +
           super.mixin.readinessProbe.withTimeoutSeconds(1) +
-          super.mixin.readinessProbe.withPeriodSeconds(10) +
+          super.mixin.readinessProbe.withPeriodSeconds(6) +
           super.mixin.readinessProbe.withFailureThreshold(3),
 
         withGRPCReadiness(port):
           super.readinessProbe.exec.withCommandMixin(['/app/grpc_health_probe', '-addr=:' + port]) +
           super.readinessProbe.withInitialDelaySeconds(5) +
           super.readinessProbe.withTimeoutSeconds(1) +
-          super.readinessProbe.withPeriodSeconds(10) +
+          super.readinessProbe.withPeriodSeconds(6) +
           super.readinessProbe.withFailureThreshold(3) +
           super.lifecycle.postStart.exec.withCommand([
             '/bin/bash',
@@ -76,13 +76,13 @@
           },
         } + mixin,
 
-        healthCheckHttp(port, requestPath='/', checkIntervalSec=10, timeoutSec=3)::
+        healthCheckHttp(port, requestPath='/', checkIntervalSec=6, timeoutSec=3)::
           self.healthCheck('HTTP', port, requestPath, checkIntervalSec, timeoutSec),
 
-        healthCheckHttps(port, requestPath='/', checkIntervalSec=10, timeoutSec=3)::
+        healthCheckHttps(port, requestPath='/', checkIntervalSec=6, timeoutSec=3)::
           self.healthCheck('HTTPS', port, requestPath, checkIntervalSec, timeoutSec),
 
-        healthCheck(type, port, requestPath='/', checkIntervalSec=10, timeoutSec=3):: {
+        healthCheck(type, port, requestPath='/', checkIntervalSec=6, timeoutSec=3):: {
           type: type,
           port: port,
           requestPath: requestPath,
@@ -283,11 +283,11 @@
        }) else service.mixin.metadata.withAnnotationsMixin({
          'cloud.google.com/neg': '{"exposed_ports":{"%d":{}}}' % exposedPort,
        })) +
-       (
-         if backendConfig == null
-         then {}
-         else service.mixin.metadata.withAnnotationsMixin({ 'beta.cloud.google.com/backend-config': '{"default": "%s"}' % backendConfig })
-       ) +
+      (
+        if backendConfig == null
+        then {}
+        else service.mixin.metadata.withAnnotationsMixin({ 'beta.cloud.google.com/backend-config': '{"default": "%s"}' % backendConfig })
+      ) +
       (if publishNotReadyAddresses then service.spec.withPublishNotReadyAddresses(true) else {}) +
       (if withPublicIP then (service.spec.withAllocateLoadBalancerNodePorts(true) + service.spec.withType('LoadBalancer')) else {}) +
       (if headless then service.spec.withClusterIP('None') else {})
