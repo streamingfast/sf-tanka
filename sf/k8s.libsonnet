@@ -275,13 +275,13 @@
         pvc.mixin.spec.withVolumeMode('Filesystem')
       ),
 
-    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false, backendConfig=null)::
+    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false, backendConfig=null, ignoredPorts=[9102])::
       local service = $.core.v1.service;
-      self.serviceFor(targetResource, ignored_ports=[9102]) +
+      self.serviceFor(targetResource, ignored_ports=ignoredPorts) +
       (if exposedPort == null then service.mixin.metadata.withAnnotationsMixin({
          'cloud.google.com/neg': '{"ingress": false}',
        }) else service.mixin.metadata.withAnnotationsMixin({
-         'cloud.google.com/neg': '{"exposed_ports":{"%d":{}}}' % exposedPort,
+         'cloud.google.com/neg': '{"ingress": false, "exposed_ports":{"%d":{}}}' % exposedPort,
        })) +
       (
         if backendConfig == null
@@ -293,9 +293,9 @@
       (if headless then service.spec.withClusterIP('None') else {})
     ,
 
-    publicServiceFor(targetResource, name=null, grpc_portnames=[], backendConfig=null)::
+    publicServiceFor(targetResource, name=null, grpc_portnames=[], backendConfig=null, ignoredPorts=[9102])::
       local service = $.core.v1.service;
-      self.serviceFor(targetResource, ignored_ports=[9102]) +
+      self.serviceFor(targetResource, ignored_ports=ignoredPorts) +
       (
         if name == null then {} else
           service.mixin.metadata.withName(name) +
