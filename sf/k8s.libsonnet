@@ -320,7 +320,7 @@
       if k != key
     },
 
-    hpaFor(parent, max_replicas, min_replicas=1, avg_cpu=50, avg_mem=0)::
+    hpaFor(parent, max_replicas, min_replicas=1, avg_cpu=50, avg_mem=0, scaleUpSeconds=70, scaleDownSeconds=60)::
       local as = $.autoscaling.v2;
       local hpa = as.horizontalPodAutoscaler;
       local hpa_spec = as.horizontalPodAutoscalerSpec;
@@ -329,7 +329,7 @@
       {
         spec: hpa_spec.behavior.scaleUp.withPolicies(
                 {
-                  periodSeconds: 70,
+                  periodSeconds: scaleUpSeconds,
                   type: 'Pods',
                   value: 4,
                 },
@@ -337,7 +337,7 @@
               hpa_spec.behavior.scaleUp.withStabilizationWindowSeconds(0) +
               hpa_spec.behavior.scaleDown.withPolicies(
                 {
-                  periodSeconds: 60,
+                  periodSeconds: scaleDownSeconds,
                   type: 'Pods',
                   value: 2,
                 },
