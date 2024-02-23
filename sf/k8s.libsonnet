@@ -339,7 +339,7 @@
                 {
                   periodSeconds: scaleDownSeconds,
                   type: 'Pods',
-                  value: 2,
+                  value: 1,
                 },
               ) +
               hpa_spec.behavior.scaleDown.withStabilizationWindowSeconds(30) +
