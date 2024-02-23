@@ -58,7 +58,7 @@
           super.readinessProbe.withPeriodSeconds(6) +
           super.readinessProbe.withFailureThreshold(3) +
           super.lifecycle.postStart.exec.withCommand([
-            '/bin/bash',
+            '/bin/sh',
             '-c',
             'test -e /app/grpc_health_probe || (curl -L https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.9/grpc_health_probe-linux-amd64 -o /app/grpc_health_probe && chmod +x /app/grpc_health_probe)',  // may not be needed but you never know
           ]),
