@@ -709,12 +709,16 @@
 
     // Extracts the service's DNS resolvable hostname from a Service definition (`apps.v1.Service`) and a specific named port
     serviceDnsHostname(service, named_port):: (
+      $.util.serviceGrpcAddr('dns', service, named_port)
+    ),
+
+    serviceGrpcAddr(scheme, service, named_port):: (
       local apiVersion = std.get(service, 'apiVersion');
       local kind = std.get(service, 'kind');
 
       assert apiVersion == 'v1' && kind == 'Service' : 'Received a non-Service component %s/%s' % [apiVersion, kind];
 
-      'dns:///%s:%d' % [service.metadata.name, $.util.servicePort(service, named_port)]
+      '%s:///%s:%d' % [scheme, service.metadata.name, $.util.servicePort(service, named_port)]
     ),
 
     // Extracts the service's name from a either a Service definition (`apps.v1.Service`) or from a
@@ -724,21 +728,20 @@
       $.util.serviceName(std.get(input, 'internalService', input))
     ),
 
-    // Extracts the service's <name>:<port> address from a either a Service definition (`apps.v1.Service`) or from a
+    // Extracts the service's hostname from a either a Service definition (`apps.v1.Service`) or from a
     // "Firehose" component (e.g. one that is defined such that it have a child key named `internalService`
-    // and it's value is an object of type `core.v1.Service`).
-    internalServiceAddr(input, named_port):: (
-      local name = $.util.serviceName(std.get(input, 'internalService', input));
-      local port = $.util.servicePort(std.get(input, 'internalService', input), named_port);
-
-      '%s:%s' % [name, port]
+    // and it's value is an object of type `core.v1.Service` and generates a gRPC address using the `dns:///`
+    // resolver.
+    internalServiceDnsHostname(input, named_port):: (
+      $.util.serviceGrpcAddr('dns', std.get(input, 'internalService', input), named_port)
     ),
 
     // Extracts the service's hostname from a either a Service definition (`apps.v1.Service`) or from a
     // "Firehose" component (e.g. one that is defined such that it have a child key named `internalService`
-    // and it's value is an object of type `core.v1.Service`).
-    internalServiceDnsHostname(input, named_port):: (
-      $.util.serviceDnsHostname(std.get(input, 'internalService', input), named_port)
+    // and it's value is an object of type `core.v1.Service`) and generates a gRPC address using the `kubernetes:///`
+    // resolver.
+    internalServiceKubernetesGrpcAddr(input, named_port):: (
+      $.util.serviceGrpcAddr('kubernetes', std.get(input, 'internalService', input), named_port)
     ),
 
     // Extracts the service's name from a either from a "Firehose" component (e.g. one that is defined
@@ -760,9 +763,18 @@
 
     // Extracts the service's hostname from "Firehose" component (e.g. one that is defined
     // such that it have a child key named `publicService` and it's value is an object of type
-    // `core.v1.Service`).
+    // `core.v1.Service`)  and generates a gRPC address using the `dns:///`
+    // resolver.
     publicServiceDnsHostname(input, named_port):: (
-      $.util.serviceDnsHostname(std.get(input, 'publicService', input), named_port)
+      $.util.serviceGrpcAddr('dns', std.get(input, 'publicService', input), named_port)
+    ),
+
+    // Extracts the service's hostname from "Firehose" component (e.g. one that is defined
+    // such that it have a child key named `publicService` and it's value is an object of type
+    // `core.v1.Service`)  and generates a gRPC address using the `kubernetes:///`
+    // resolver.
+    publicServiceKubernetesGrpcAddr(input, named_port):: (
+      $.util.serviceGrpcAddr('kubernetes', std.get(input, 'publicService', input), named_port)
     ),
 
     // can replace by 'null' to prune
