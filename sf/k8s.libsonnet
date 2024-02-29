@@ -721,9 +721,25 @@
       '%s:///%s:%d' % [scheme, service.metadata.name, $.util.servicePort(service, named_port)]
     ),
 
+    // Extracts the service's <name>:<port> address from a "Firehose" component (e.g. one that is defined
+    // such that it have a child key named `internalService` and it's value is an object of type
+    // `core.v1.Service`).
+    //
+    // To be used like `k.util.internalServiceAddr($.substreams_tier1, 'grpc')` which would yield
+    // something like `substreams-tier1:9000`.
+    internalServiceAddr(input, named_port):: (
+      local name = $.util.serviceName(std.get(input, 'internalService', input));
+      local port = $.util.servicePort(std.get(input, 'internalService', input), named_port);
+
+      '%s:%s' % [name, port]
+    ),
+
     // Extracts the service's name from a either a Service definition (`apps.v1.Service`) or from a
     // "Firehose" component (e.g. one that is defined such that it have a child key named `internalService`
     // and it's value is an object of type `core.v1.Service`).
+    //
+    // To be used like `k.util.internalServiceAddr($.substreams_tier1)` which would yield
+    // something like `substreams-tier1` (e.g. the service's name).
     internalServiceName(input):: (
       $.util.serviceName(std.get(input, 'internalService', input))
     ),
@@ -732,6 +748,9 @@
     // "Firehose" component (e.g. one that is defined such that it have a child key named `internalService`
     // and it's value is an object of type `core.v1.Service` and generates a gRPC address using the `dns:///`
     // resolver.
+    //
+    // To be used like `k.util.internalServiceDnsHostname($.substreams_tier1, 'grpc')` which would yield
+    // something like `dns:///substreams-tier1:9000`.
     internalServiceDnsHostname(input, named_port):: (
       $.util.serviceGrpcAddr('dns', std.get(input, 'internalService', input), named_port)
     ),
@@ -740,6 +759,9 @@
     // "Firehose" component (e.g. one that is defined such that it have a child key named `internalService`
     // and it's value is an object of type `core.v1.Service`) and generates a gRPC address using the `kubernetes:///`
     // resolver.
+    //
+    // To be used like `k.util.internalServiceKubernetesGrpcAddr($.substreams_tier1, 'grpc')` which would yield
+    // something like `kubernetes:///substreams-tier1:9000`.
     internalServiceKubernetesGrpcAddr(input, named_port):: (
       $.util.serviceGrpcAddr('kubernetes', std.get(input, 'internalService', input), named_port)
     ),
@@ -747,6 +769,9 @@
     // Extracts the service's name from a either from a "Firehose" component (e.g. one that is defined
     // such that it have a child key named `publicService` and it's value is an object of type
     // `core.v1.Service`).
+    //
+    // To be used like `k.util.publicServiceName($.substreams_tier1)` which would yield
+    // something like `substreams-tier1`.
     publicServiceName(input):: (
       $.util.serviceName(std.get(input, 'publicService', input))
     ),
@@ -754,6 +779,9 @@
     // Extracts the service's <name>:<port> address from a "Firehose" component (e.g. one that is defined
     // such that it have a child key named `publicService` and it's value is an object of type
     // `core.v1.Service`).
+    //
+    // To be used like `k.util.publicServiceAddr($.substreams_tier1, 'grpc')` which would yield
+    // something like `substreams-tier1:9000`.
     publicServiceAddr(input, named_port):: (
       local name = $.util.serviceName(std.get(input, 'publicService', input));
       local port = $.util.servicePort(std.get(input, 'publicService', input), named_port);
@@ -765,6 +793,9 @@
     // such that it have a child key named `publicService` and it's value is an object of type
     // `core.v1.Service`)  and generates a gRPC address using the `dns:///`
     // resolver.
+    //
+    // To be used like `k.util.publicServiceDnsHostname($.substreams_tier1, 'grpc')` which would yield
+    // something like `dns:///substreams-tier1:9000`.
     publicServiceDnsHostname(input, named_port):: (
       $.util.serviceGrpcAddr('dns', std.get(input, 'publicService', input), named_port)
     ),
@@ -773,6 +804,9 @@
     // such that it have a child key named `publicService` and it's value is an object of type
     // `core.v1.Service`)  and generates a gRPC address using the `kubernetes:///`
     // resolver.
+    //
+    // To be used like `k.util.publicServiceKubernetesGrpcAddr($.substreams_tier1, 'grpc')` which would yield
+    // something like `kubernetes:///substreams-tier1:9000`.
     publicServiceKubernetesGrpcAddr(input, named_port):: (
       $.util.serviceGrpcAddr('kubernetes', std.get(input, 'publicService', input), named_port)
     ),
