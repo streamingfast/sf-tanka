@@ -660,10 +660,12 @@
         template+: {
           spec+: {
             containers:
-              super.containers[0:containerIndex] +
-              [
-                super.containers[containerIndex] + mixin,
-              ] + super.containers[containerIndex + 1:],
+              if containerIndex > std.length(super.containers) - 1 then super.containers + [mixin] else (
+                super.containers[0:containerIndex] +
+                [
+                  super.containers[containerIndex] + mixin,
+                ] + super.containers[containerIndex + 1:]
+              ),
           },
         },
       },
