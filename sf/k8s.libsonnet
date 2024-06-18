@@ -671,7 +671,7 @@
       },
     },
 
-    // Extracts the pod's name from a either a app definition (`apps.v1.StatefulSet`) or from a
+    // Extracts the pod's name from either a app definition (`apps.v1.StatefulSet`) or from a
     // "Firehose" component (e.g. one that is defined such that it have a child key named `StatefulSet`
     // and it's value is an object of type `apps.v1.StatefulSet`).
     podNameFromSts(input, index=0):: (
@@ -682,6 +682,40 @@
       assert apiVersion == 'apps/v1' && kind == 'StatefulSet' : 'Received a non-StatefulSet component %s/%s' % [apiVersion, kind];
 
       '%s-%d' % [statefulSet.metadata.name, index]
+    ),
+
+    // Extracts the stateful set's name from either a app definition (`apps.v1.StatefulSet`) or from a
+    // "Firehose" component (e.g. one that is defined such that it have a child key named `StatefulSet`
+    // and it's value is an object of type `apps.v1.StatefulSet`).
+    stsName(input):: (
+      local statefulSet = std.get(input, 'statefulSet', input);
+      local apiVersion = std.get(statefulSet, 'apiVersion');
+      local kind = std.get(statefulSet, 'kind');
+
+      assert apiVersion == 'apps/v1' && kind == 'StatefulSet' : 'Received a non-StatefulSet component %s/%s' % [apiVersion, kind];
+
+      statefulSet.metadata.name
+    ),
+
+    // Extracts the pod's port value for given named port from either a app definition (`apps.v1.StatefulSet`)
+    // or from a "Firehose" component (e.g. one that is defined such that it have a child key named `StatefulSet`
+    // and it's value is an object of type `apps.v1.StatefulSet`)
+    podPortFromSts(input, named_port, container = ''):: (
+      local statefulSet = std.get(input, 'statefulSet', input);
+      local apiVersion = std.get(statefulSet, 'apiVersion');
+      local kind = std.get(statefulSet, 'kind');
+
+      assert apiVersion == 'apps/v1' && kind == 'StatefulSet' : 'Received a non-StatefulSet component %s/%s' % [apiVersion, kind];
+
+      local containerIndex = if container == '' then 0 else std.index(statefulSet.spec.template.spec.containers, container);
+      local container = statefulSet.spec.template.spec.containers[containerIndex];
+
+      local portNames = [x.name for x in container.ports];
+      local portByName = { [x.name]: x for x in container.ports };
+
+      assert std.objectHas(portByName, named_port) : 'No port named %s found in container %s (valid names are %s)' % [named_port, container.name, std.join(', ', portNames)];
+
+      portByName[named_port].containerPort
     ),
 
     // Extracts the service's name from a Service definition (`apps.v1.Service`)
