@@ -2,15 +2,37 @@
 //
 // Reference for ksonnet k8s https://jsonnet-libs.github.io/k8s-libsonnet/ (pick the right version based on which cluster
 // version you want to deploy to).
-(import 'ksonnet-util/kausal.libsonnet') +
-{
+(import 'ksonnet-util/kausal.libsonnet') + {
   MiB: (1024 * 1024),
   GiB: (1024 * 1024 * 1024),
+
+  // local rbac = k.rbac.v1;
+  // local rbacRole = rbac.role;
+  // local rbacRoleBinding = rbac.roleBinding;
+
+  // Shortcuts always used
+  configMap: $.core.v1.configMap,
+  deployment: $.apps.v1.deployment,
+  sts: $.apps.v1.statefulSet,
+  container: $.core.v1.container,
+  pvc: $.core.v1.persistentVolumeClaim,
+  volumeMount: $.core.v1.volumeMount,
+  port: $.core.v1.containerPort,
+  service: $.core.v1.service,
+  envVar: $.core.v1.envVar,
+  servicePort: $.core.v1.servicePort,
+  ingress: $.networking.v1.ingress,
+  backendConfig: $.core.v1.backendConfig,
+  serviceAccount: $.core.v1.serviceAccount,
+  rbacRole: $.rbac.v1.role,
+  rbacRoleBinding: $.rbac.v1.roleBinding,
+  rbacPolicyRule: $.rbac.v1.policyRule,
+  volume: $.core.v1.volume,
 
   apps+: {
     v1+: {
       deployment+: {
-        new(name, replicas, containers, labels)::
+        new(name, replicas, containers, labels=[], initContainers=[])::
           super.new(name, replicas, containers, labels) +
           //super.mixin.spec.withMinReadySeconds(10) + //default from grafana.libsonnet
           //super.mixin.spec.withRevisionHistoryLimit(10) + //default from grafana.libsonnet
@@ -19,15 +41,17 @@
           super.mixin.spec.strategy.withType('RollingUpdate') +
           super.mixin.spec.strategy.rollingUpdate.withMaxSurge(1) +
           super.mixin.spec.strategy.rollingUpdate.withMaxUnavailable(1) +
+          (if initContainers != [] then super.spec.template.spec.withInitContainers(initContainers) else {}) +
           super.mixin.spec.template.spec.withTerminationGracePeriodSeconds(30),
       },
 
       statefulSet+: {
-        new(name, replicas, containers, labels, serviceName, volumeClaims=[])::
+        new(name, replicas, containers, labels, serviceName, initContainers=[], volumeClaims=[])::
           super.new(name, replicas, containers, volumeClaims=volumeClaims, podLabels=labels) +
           //super.mixin.spec.updateStrategy.withType('RollingUpdate') + // default from grafana.libsonnet
           super.mixin.metadata.withLabels(labels) +
           super.spec.withPodManagementPolicy('Parallel') +
+          (if initContainers != [] then super.spec.template.spec.withInitContainers(initContainers) else {}) +
           super.mixin.spec.withServiceName(serviceName),
       },
     },
@@ -39,29 +63,50 @@
         withCommand(args):
           super.withCommand(std.prune(args)),
 
-        withHealthzReadiness(port, ssl=false):
-          self.withHttpReadiness(port, path='/healthz', ssl=ssl),
+        withHealthzReadiness(port, ssl=false, period=6, threshold=3):
+          self.withHttpReadiness(port, path='/healthz', ssl=ssl, period=period, threshold=threshold),
 
-        withHttpReadiness(port, path='/', ssl=false):
+        withHttpReadiness(port, path='/', ssl=false, period=6, threshold=3):
           super.mixin.readinessProbe.httpGet.withPath(path) +
           super.mixin.readinessProbe.httpGet.withPort(port) +
           super.mixin.readinessProbe.httpGet.withScheme(if ssl then 'HTTPS' else 'HTTP') +
           super.mixin.readinessProbe.withInitialDelaySeconds(5) +
           super.mixin.readinessProbe.withTimeoutSeconds(1) +
-          super.mixin.readinessProbe.withPeriodSeconds(6) +
-          super.mixin.readinessProbe.withFailureThreshold(3),
+          super.mixin.readinessProbe.withPeriodSeconds(period) +
+          super.mixin.readinessProbe.withFailureThreshold(threshold),
 
-        withGRPCReadiness(port):
+        withStartupProbe(port, path='/', ssl=false, period=1, threshold=60):
+          super.mixin.startupProbe.httpGet.withPath(path) +
+          super.mixin.startupProbe.withFailureThreshold(threshold) +
+          super.mixin.startupProbe.httpGet.withPort(port) +
+          super.mixin.startupProbe.httpGet.withScheme(if ssl then 'HTTPS' else 'HTTP') +
+          super.mixin.startupProbe.withTimeoutSeconds(10) +
+          super.mixin.startupProbe.withPeriodSeconds(period),
+
+        withLivenessProbe(port, path='/', ssl=false, period=10, threshold=3):
+          super.mixin.livenessProbe.httpGet.withPath(path) +
+          super.mixin.livenessProbe.withFailureThreshold(threshold) +
+          super.mixin.livenessProbe.httpGet.withPort(port) +
+          super.mixin.livenessProbe.httpGet.withScheme(if ssl then 'HTTPS' else 'HTTP') +
+          // The probe will fail if it does not respond in 10 seconds
+          super.mixin.livenessProbe.withTimeoutSeconds(10) +
+          // The probe will be checked every 10 seconds.
+          super.mixin.livenessProbe.withPeriodSeconds(period),
+
+        withGRPCReadiness(port, period=6, threshold=3):
           super.readinessProbe.exec.withCommandMixin(['/app/grpc_health_probe', '-addr=:' + port]) +
           super.readinessProbe.withInitialDelaySeconds(5) +
           super.readinessProbe.withTimeoutSeconds(1) +
-          super.readinessProbe.withPeriodSeconds(6) +
-          super.readinessProbe.withFailureThreshold(3) +
+          super.readinessProbe.withPeriodSeconds(period) +
+          super.readinessProbe.withFailureThreshold(threshold) +
           super.lifecycle.postStart.exec.withCommand([
             '/bin/sh',
             '-c',
             'test -e /app/grpc_health_probe || (curl -L https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.9/grpc_health_probe-linux-amd64 -o /app/grpc_health_probe && chmod +x /app/grpc_health_probe)',  // may not be needed but you never know
           ]),
+
+        withTCPReadiness(port):
+          super.mixin.readinessProbe.tcpSocket.withPort(port),
       },
       backendConfig+: {
         new(service, healthCheck=null, labels={}, mixin={}):: {
@@ -244,7 +289,7 @@
       local max_disk = std.get(disk, 'max_size', null);
 
       util.attachPVCTemplate(
-        'datadir',
+        name,
         disk.size,
         disk.storage_class,
         resize=max_disk != null && max_disk != '',
@@ -263,7 +308,7 @@
       local pvc = $.core.v1.persistentVolumeClaim;
       local sts = $.apps.v1.statefulSet;
       sts.spec.withVolumeClaimTemplatesMixin(
-        pvc.new('datadir') +
+        pvc.new(name) +
         (if resize then pvc.mixin.metadata.withAnnotations({
            'resize.topolvm.io/increase': resizeStep,
            'resize.topolvm.io/storage_limit': resizeLimit,
@@ -275,9 +320,9 @@
         pvc.mixin.spec.withVolumeMode('Filesystem')
       ),
 
-    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false, backendConfig=null, ignoredPorts=[9102])::
+    internalServiceFor(targetResource, publishNotReadyAddresses=false, headless=false, exposedPort=null, withPublicIP=false, backendConfig=null, ignoredPorts=[9102], ignored_labels=[])::
       local service = $.core.v1.service;
-      self.serviceFor(targetResource, ignored_ports=ignoredPorts) +
+      self.serviceFor(targetResource, ignored_ports=ignoredPorts, ignored_labels=ignored_labels) +
       (if exposedPort == null then service.mixin.metadata.withAnnotationsMixin({
          'cloud.google.com/neg': '{"ingress": false}',
        }) else service.mixin.metadata.withAnnotationsMixin({
@@ -320,7 +365,7 @@
       if k != key
     },
 
-    hpaFor(parent, max_replicas, min_replicas=1, avg_cpu=50, avg_mem=0, scaleUpSeconds=70, scaleDownSeconds=60)::
+    hpaFor(parent, max_replicas, min_replicas=1, avg_cpu=50, avg_mem=0, scaleUpSeconds=70, scaleDownSeconds=60, extra_metrics=[])::
       local as = $.autoscaling.v2;
       local hpa = as.horizontalPodAutoscaler;
       local hpa_spec = as.horizontalPodAutoscalerSpec;
@@ -362,7 +407,7 @@
                      as.metricSpec.resource.withName('cpu') +
                      as.metricSpec.withType('Resource')
                    else null),
-                ])
+                ] + extra_metrics)
               ),
       },
 
@@ -450,20 +495,20 @@
     runOnNodePoolAndZoneOnlyIfSet(zones, nodePool):: (
       if zones != null && zones != '' && nodePool != null && nodePool != '' then (
         util.templateToleration(util.tolerationNodeInPool(nodePool)) +
-        util.templateAffinity(util.affinityBoth(zones, nodePool))
+        util.templateAffinityMixin(util.affinityBoth(zones, nodePool))
       ) else self.runOnZoneOnlyIfSet(zones) + self.runOnNodePoolOnlyIfSet(nodePool)
     ),
 
     runOnZoneOnlyIfSet(zones):: (
       if zones != null && zones != '' then (
-        util.templateAffinity(util.affinityNodeInZones(zones))
+        util.templateAffinityMixin(util.affinityNodeInZones(zones))
       ) else {}
     ),
 
     runOnNodePoolOnlyIfSet(nodePool):: (
       if nodePool != null && nodePool != '' then (
         util.templateToleration(util.tolerationNodeInPool(nodePool)) +
-        util.templateAffinity(util.affinityNodeInPools(nodePool))
+        util.templateAffinityMixin(util.affinityNodeInPools(nodePool))
       ) else
         {}
     ),
@@ -508,6 +553,8 @@
     },
 
     affinityBoth(zones, nodePools, zone_key='topology.kubernetes.io/zone', pool_key='pool-id'):: {
+      local nodePoolsArray = if std.isArray(v=nodePools) then nodePools else [nodePools],
+      local zonesArray = if std.isArray(v=zones) then zones else [zones],
       nodeAffinity+: {
         requiredDuringSchedulingIgnoredDuringExecution+: {
           nodeSelectorTerms+: [
@@ -516,15 +563,16 @@
                 {
                   key: zone_key,
                   operator: 'In',
-                  values: if std.isArray(v=zones) then zones else [zones],
+                  values: zonesArray,
                 },
                 {
                   key: pool_key,
                   operator: 'In',
-                  values: if std.isArray(v=nodePools) then nodePools else [nodePools],
+                  values: [pool],
                 },
               ],
-            },
+            }
+            for pool in nodePoolsArray
           ],
         },
       },
@@ -585,12 +633,21 @@
       ) else {},
     },
 
-    tolerationNodeInPool(nodePool, key='compute-class'):: {
-      effect: 'NoSchedule',
-      key: key,
-      operator: 'Equal',
-      value: nodePool,
-    },
+    tolerationNodeInPool(nodePool, key='compute-class')::
+      if std.isArray(v=nodePool) then [
+        {
+          effect: 'NoSchedule',
+          key: key,
+          operator: 'Equal',
+          value: pool,
+        }
+        for pool in nodePool
+      ] else {
+        effect: 'NoSchedule',
+        key: key,
+        operator: 'Equal',
+        value: nodePool,
+      },
 
     //  affinityAntiMatchApp(app, weight=10):: {
     //    podAntiAffinity: {
@@ -641,6 +698,43 @@
     //    },
     //  },
 
+
+    // Sets podAntiAffinity on a Deployment or StatefulSet template to spread pods across nodes and zones.
+    // - preferred (weight 100): spread across zones (topology.kubernetes.io/zone)
+    // - required: one pod per node (kubernetes.io/hostname)
+    //
+    // To be used like:
+    //
+    //     myDeployment+:
+    //       k.util.setPodAntiAffinityNodeAndZone('my-component-name')
+    setPodAntiAffinityNodeAndZone(name)::
+      util.templateAffinityMixin({
+        podAntiAffinity: {
+          preferredDuringSchedulingIgnoredDuringExecution: [
+            {
+              weight: 100,
+              podAffinityTerm: {
+                labelSelector: {
+                  matchLabels: {
+                    name: name,
+                  },
+                },
+                topologyKey: 'topology.kubernetes.io/zone',
+              },
+            },
+          ],
+          requiredDuringSchedulingIgnoredDuringExecution: [
+            {
+              labelSelector: {
+                matchLabels: {
+                  name: name,
+                },
+              },
+              topologyKey: 'kubernetes.io/hostname',
+            },
+          ],
+        },
+      }),
 
     stsServiceAccount(acct)::
       local sts = $.apps.v1.statefulSet;
@@ -700,7 +794,7 @@
     // Extracts the pod's port value for given named port from either a app definition (`apps.v1.StatefulSet`)
     // or from a "Firehose" component (e.g. one that is defined such that it have a child key named `StatefulSet`
     // and it's value is an object of type `apps.v1.StatefulSet`)
-    podPortFromSts(input, named_port, container = ''):: (
+    podPortFromSts(input, named_port, container=''):: (
       local statefulSet = std.get(input, 'statefulSet', input);
       local apiVersion = std.get(statefulSet, 'apiVersion');
       local kind = std.get(statefulSet, 'kind');
@@ -717,6 +811,26 @@
 
       portByName[named_port].containerPort
     ),
+
+    // Sets partition for StatefulSet rolling update. Pods with ordinal >= partition will be updated.
+    // Returns a mixin object that can be applied to a component with a 'statefulSet' field.
+    //
+    // To be used like:
+    //
+    //     reader+:
+    //       k.util.partitionSts(1)
+    partitionSts(partition):: {
+      statefulSet+: {
+        spec+: {
+          updateStrategy+: {
+            type: 'RollingUpdate',
+            rollingUpdate+: {
+              partition: partition,
+            },
+          },
+        },
+      },
+    },
 
     // Extracts the service's name from a Service definition (`apps.v1.Service`)
     serviceName(service):: (
@@ -764,10 +878,9 @@
     // To be used like `k.util.internalServiceAddr($.substreams_tier1, 'grpc')` which would yield
     // something like `substreams-tier1:9000`.
     internalServiceAddr(input, named_port):: (
-      local name = $.util.serviceName(std.get(input, 'internalService', input));
-      local port = $.util.servicePort(std.get(input, 'internalService', input), named_port);
+      local service = $.util.internalServiceNameAndPort(input, named_port);
 
-      '%s:%s' % [name, port]
+      '%s:%s' % [service.name, service.port]
     ),
 
     // Extracts the service's name from a either a Service definition (`apps.v1.Service`) or from a
@@ -778,6 +891,31 @@
     // something like `substreams-tier1` (e.g. the service's name).
     internalServiceName(input):: (
       $.util.serviceName(std.get(input, 'internalService', input))
+    ),
+
+    // Extracts the service's port from a either from a "Firehose" component (e.g. one that is defined
+    // such that it have a child key named `internalService` and it's value is an object of type
+    // `core.v1.Service`).
+    //
+    // To be used like `k.util.internalServicePort($.relayer, 'relayer-grpc)` which would yield
+    // something like `9000`.
+    internalServicePort(input, named_port):: (
+      $.util.servicePort(std.get(input, 'internalService', input))
+    ),
+
+    // Extracts the service's { name: <name>, port: <port> } in object form from a "Firehose" component
+    // (e.g. one that is defined such that it have a child key named `internalService` and it's value is an
+    // object of type `core.v1.Service`).
+    //
+    // To be used like `k.util.internalServiceNameAndPort($.substreams_tier1, 'grpc')` which would yield
+    // something like `{ name: 'substreams-tier1', port: 9000 }`.
+    internalServiceNameAndPort(input, named_port):: (
+      assert input != null : 'Received a null Service input component when calling "internalServiceNameAndPort"';
+
+      local name = $.util.serviceName(std.get(input, 'internalService', input));
+      local port = $.util.servicePort(std.get(input, 'internalService', input), named_port);
+
+      { name: name, port: port }
     ),
 
     // Extracts the service's hostname from a either a Service definition (`apps.v1.Service`) or from a
@@ -812,6 +950,16 @@
       $.util.serviceName(std.get(input, 'publicService', input))
     ),
 
+    // Extracts the service's port from a either from a "Firehose" component (e.g. one that is defined
+    // such that it have a child key named `publicService` and it's value is an object of type
+    // `core.v1.Service`).
+    //
+    // To be used like `k.util.publicServicePort($.relayer, 'relayer-grpc)` which would yield
+    // something like `9000`.
+    publicServicePort(input, named_port):: (
+      $.util.servicePort(std.get(input, 'publicService', input))
+    ),
+
     // Extracts the service's <name>:<port> address from a "Firehose" component (e.g. one that is defined
     // such that it have a child key named `publicService` and it's value is an object of type
     // `core.v1.Service`).
@@ -819,10 +967,22 @@
     // To be used like `k.util.publicServiceAddr($.substreams_tier1, 'grpc')` which would yield
     // something like `substreams-tier1:9000`.
     publicServiceAddr(input, named_port):: (
+      local service = $.util.publicServiceNameAndPort(input, named_port);
+
+      '%s:%s' % [service.name, service.port]
+    ),
+
+    // Extracts the service's { name: <name>, port: <port> } in object form from a "Firehose" component
+    // (e.g. one that is defined such that it have a child key named `publicService` and it's value is an
+    // object of type `core.v1.Service`).
+    //
+    // To be used like `k.util.publicServiceNameAndPort($.substreams_tier1, 'grpc')` which would yield
+    // something like `{ name: 'substreams-tier1', port: 9000 }`.
+    publicServiceNameAndPort(input, named_port):: (
       local name = $.util.serviceName(std.get(input, 'publicService', input));
       local port = $.util.servicePort(std.get(input, 'publicService', input), named_port);
 
-      '%s:%s' % [name, port]
+      { name: name, port: port }
     ),
 
     // Extracts the service's hostname from "Firehose" component (e.g. one that is defined
